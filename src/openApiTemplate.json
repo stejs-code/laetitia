@@ -1,0 +1,238 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "",
+    "version": "will be generated",
+    "description": "Auto-generated documentation by Laetitia"
+  },
+  "servers": [
+    {
+      "url": "{protocol}://{domain}/",
+      "description": "",
+      "variables": {
+        "protocol": {
+          "default": "http",
+          "enum": [
+            "http",
+            "https"
+          ]
+        },
+        "domain": {
+          "default": "api.toming.cz",
+          "enum": [
+            "api.toming.cz",
+            "api.toming.cz.local"
+          ]
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "Core"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "startId": {
+                      "type": "string",
+                      "description": "Randomly generated at the start of the application"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/v1/core/health": {
+      "get": {
+        "summary": "Systems health",
+        "tags": [
+          "Core"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "meilisearch": {
+                      "type": "boolean"
+                    },
+                    "redis": {
+                      "type": "boolean"
+                    },
+                    "healthy": {
+                      "type": "boolean"
+                    },
+                    "heap": {
+                      "type": "string",
+                      "description": "Current RAM usage in MB"
+                    },
+                    "objects": {
+                      "type": "number",
+                      "description": "Number of initialized objects"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/v1/core/heap": {
+      "get": {
+        "summary": "Systems heap snapshot",
+        "tags": [
+          "Core"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/v1/core/handler": {
+      "get": {
+        "description": "Returns list of ids of all handlers",
+        "summary": "",
+        "tags": [
+          "Core/Handler"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "handler id"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": []
+    },
+    "/v1/core/handler/{id}": {
+      "get": {
+        "description": "Information about handler",
+        "summary": "",
+        "tags": [
+          "Core/Handler"
+        ],
+        "responses": {
+          "200": {
+            "description": "Found",
+            "content": {
+              "application/json": {
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "description": "ID of handler (method + url encoded with base64)"
+            },
+            "in": "path"
+          }
+        ]
+      }
+    },
+    "/v1/core/handler/{id}/paw": {
+      "get": {
+        "summary": "",
+        "tags": [
+          "Core/Handler"
+        ],
+        "responses": {
+          "307": {
+            "description": "Imports handler to paw"
+          },
+          "404": {
+            "description": "Handler doesn't exist"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "description": "ID of handler (method + url encoded with base64)"
+            },
+            "in": "path"
+          }
+        ]
+      }
+    },
+    "/v1/docs": {
+      "get": {
+        "summary": "Documentation",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "success",
+            "content": {
+              "text/html": {
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/v1/docs/definition": {
+      "get": {
+        "summary": "",
+        "tags": [
+          "Docs"
+        ],
+        "responses": {
+          "200": {
+            "description": "Open api specification",
+            "content": {
+              "application/json": {
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    }
+  }
+}

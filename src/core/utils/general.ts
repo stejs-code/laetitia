@@ -1,0 +1,1 @@
+export const isDev = Bun.env.ENVIROMENT === "development"

@@ -1,0 +1,35 @@
+{
+  "name": "framework",
+  "version": "0.1.0",
+  "module": "core/entry.ts",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "bun run --watch src/entry.ts",
+    "dev.debug": "bun run --inspect=localhost:4000/api --watch src/entry.ts",
+    "test": "bun test --inspect=localhost:4000/api core/handler"
+  },
+  "devDependencies": {
+    "@types/eslint": "8.44.1",
+    "@types/lodash": "^4.14.199",
+    "@types/node": "^20.4.5",
+    "@typescript-eslint/eslint-plugin": "6.2.0",
+    "@typescript-eslint/parser": "6.2.0",
+    "bun-types": "latest",
+    "openapi-typescript": "^6.7.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@stricjs/router": "^5.0.0",
+    "@stricjs/utils": "^1.6.1",
+    "chalk": "^5.3.0",
+    "lodash": "^4.17.21",
+    "meilisearch": "^0.35.0",
+    "redis": "^4.6.10",
+    "status-code-enum": "^1.0.0",
+    "typescript": "^5.2.2",
+    "zod": "^3.22.2",
+    "zod-to-json-schema": "^3.21.4"
+  }
+}

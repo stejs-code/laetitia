@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta
+            name="description"
+            content="SwaggerUI"
+    />
+    <title>SwaggerUI</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.0.0/swagger-ui.css"/>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5.0.0/swagger-ui-bundle.js" crossorigin></script>
+<script src="https://unpkg.com/swagger-ui-dist@5.0.0/swagger-ui-standalone-preset.js" crossorigin></script>
+<script>
+    // window.onload = () => {
+    //     window.ui = SwaggerUIBundle({
+    //         url: 'https://petstore3.swagger.io/api/v3/openapi.json',
+    //         dom_id: '#swagger-ui',
+    //         // presets: [
+    //         //     SwaggerUIBundle.presets.apis,
+    //         //     SwaggerUIStandalonePreset
+    //         // ],
+    //         // layout: "StandaloneLayout",
+    //     });
+    // };
+
+    window.onload = () => {
+        var ui = SwaggerUIBundle({
+            url: '/v1/docs/definition',
+            dom_id: "#swagger-ui",
+            docExpansion: 'none',
+            useUnsafeMarkdown: true,
+            onComplete: function () {
+                if (window.location.hash) {
+                    let hash = window.location.hash.replace('#', '');
+                    let anchor = document.getElementById(hash);
+                    if (anchor) {
+                        anchor.scrollIntoView();
+                        if (anchor.getAttribute('data-is-open') === 'false') {
+                            anchor.click();
+                        }
+                    }
+                }
+            },
+
+        });
+    };
+</script>
+</body>
+</html>
