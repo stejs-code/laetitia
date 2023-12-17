@@ -87,7 +87,7 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
             const id = randomId(10)
             try {
 
-                info(`${ctx.request.method} ${ctx.request.url} id:${id} ses:${censor(ctx.headers.Authorization || "")}`)
+                info(`${ctx.request.method} ${ctx.request.url} id:${id} ses:${censor(ctx.headers.authorization || "")}`)
                 const context = await ApiContext.init(ctx)
 
 

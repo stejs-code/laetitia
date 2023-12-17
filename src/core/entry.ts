@@ -3,7 +3,7 @@ import {Handler as LaeticiaHandler} from "~/core/handler/handler.ts";
 import {PureHandler} from "~/core/handler/pureHandler.ts";
 import {readDirRecursive} from "~/core/utils/readDirRecursive.ts";
 import {meilisearch} from "~/core/provider/meilisearch.ts";
-import {info, warn} from "~/core/utils/logger.ts";
+import {error, info, warn} from "~/core/utils/logger.ts";
 import {generateHeapSnapshot} from "bun";
 import {redis} from "~/core/provider/redis.ts";
 import {heapStats} from "bun:jsc";
@@ -56,12 +56,14 @@ export async function core() {
 
     const app = new Elysia()
         .use(html())
-        .onError(({code}) => {
-            if (code === 'NOT_FOUND') return ({
+        .onError((context) => {
+            if (context.code === 'NOT_FOUND') return ({
                 error: true,
                 message: "route not found",
                 status: 404
             })
+
+            error(context.error)
 
             return ({
                 error: true,

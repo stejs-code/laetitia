@@ -1,5 +1,4 @@
 import chalk from "chalk";
-import process from "node:process";
 
 export function getHead() {
     const now = new Date()

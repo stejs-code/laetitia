@@ -38,11 +38,11 @@ export class ApiContext {
      * @param ctx
      */
     static async init(ctx: Context): Promise<ApiContext> {
-        if (!ctx.headers.Authorization) throw new ApiError(StatusCode.ClientErrorUnauthorized, "missing Authorization header")
+        if (!ctx.headers.authorization) throw new ApiError(StatusCode.ClientErrorUnauthorized, "missing authorization header")
 
         try {
 
-            const id = ctx.headers.Authorization.slice(7) || ""
+            const id = ctx.headers.authorization.slice(7) || ""
 
             if (id === Bun.env.API_MASTER_KEY) {
                 const allTruePermissions = permissionsZod.parse({})
