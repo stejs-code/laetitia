@@ -83,9 +83,6 @@ export const createUser = new Handler(
     }),
     "create",
     async (props) => {
-        // injects.createApiKey({
-        //     data: {}
-        // })
         return user.create({
             ...props,
             data: {

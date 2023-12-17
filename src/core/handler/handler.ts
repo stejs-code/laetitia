@@ -33,12 +33,12 @@ export const PropLocations = {
 export type PropsLocation<ZProps extends AnyZodObject> = { [key in ZProps["shape"]]: PropLocation }
 
 export type HandlerFunction<ZProps extends AnyZodObject, ZResponse extends AnyZodObject> = (props: z.infer<ZProps>) => Promise<z.input<ZResponse>> | z.input<ZResponse>
-
+export type OuterHandlerFunction<ZProps extends AnyZodObject, ZResponse extends AnyZodObject> = (props: z.input<ZProps>) => Promise<z.infer<ZResponse>> | z.infer<ZResponse>
 export type InjectList = { [k: string]: Injectable }
 export type Dependencies<Inject extends InjectList> = Inject extends never
     ? any
     : {
-        [Key in keyof Inject]: HandlerFunction<Inject[Key]["zProps"], Inject[Key]["zResponse"]>
+        [Key in keyof Inject]: OuterHandlerFunction<Inject[Key]["zProps"], Inject[Key]["zResponse"]>
     }
 
 
@@ -419,10 +419,18 @@ export class Handler<
                 dependencies[key] = injections[key].prepare(ctx)
             }
 
-            return this.handler(
+            return this.zResponse.parse(await this.handler(
                 this.zProps.parse(props),
                 dependencies as Dependencies<Injections>
-            );
+            ))
         }
+    }
+
+    /**
+     * Prints http link to paw redirect into console
+     * Use only in development
+     */
+    paw(): void {
+        console.log(`http://0.0.0.0:3000/v1/core/handler/${this.id}/paw`)
     }
 }
