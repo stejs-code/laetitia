@@ -1,12 +1,11 @@
 import {ApiError} from "~/core/apiError.ts";
 import StatusCode from "status-code-enum";
-import type {Context} from "@stricjs/router";
 import {meilisearch} from "~/core/provider/meilisearch.ts";
 import {getIndexName} from "~/core/utils/getIndexName.ts";
 import type {Permissions} from "~/core/generated/permissions.ts";
 import {permissionsZod} from "~/core/generated/permissions.ts";
 import {error} from "~/core/utils/logger.ts";
-import {type} from "os";
+import type {Context} from "elysia";
 
 export type LoginMethod = "api-key" | "master-key"
 
@@ -39,11 +38,11 @@ export class ApiContext {
      * @param ctx
      */
     static async init(ctx: Context): Promise<ApiContext> {
-        if (!ctx.headers.has("Authorization")) throw new ApiError(StatusCode.ClientErrorUnauthorized, "missing Authorization header")
+        if (!ctx.headers.Authorization) throw new ApiError(StatusCode.ClientErrorUnauthorized, "missing Authorization header")
 
         try {
 
-            const id = ctx.headers.get("Authorization")?.slice(7) || ""
+            const id = ctx.headers.Authorization.slice(7) || ""
 
             if (id === Bun.env.API_MASTER_KEY) {
                 const allTruePermissions = permissionsZod.parse({})

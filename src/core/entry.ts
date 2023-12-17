@@ -2,18 +2,16 @@ import * as path from "path";
 import {Handler as LaeticiaHandler} from "~/core/handler/handler.ts";
 import {PureHandler} from "~/core/handler/pureHandler.ts";
 import {readDirRecursive} from "~/core/utils/readDirRecursive.ts";
-import {html} from "@stricjs/utils";
 import {meilisearch} from "~/core/provider/meilisearch.ts";
-import {warn} from "~/core/utils/logger.ts";
+import {info, warn} from "~/core/utils/logger.ts";
 import {generateHeapSnapshot} from "bun";
-import type {Handler} from "@stricjs/router";
-import {Group, Router} from "@stricjs/router";
-import type {RouteOptions} from "@stricjs/router/types/core/types";
 import {redis} from "~/core/provider/redis.ts";
 import {heapStats} from "bun:jsc";
 import {randomId} from "~/core/utils/randomId.ts";
 import {generateDocs} from "~/core/loaders/docs.ts";
 import {generatePermissionsFile} from "~/core/loaders/permissions.ts";
+import Elysia from "elysia";
+import {html} from "@elysiajs/html";
 
 
 export async function core() {
@@ -33,7 +31,7 @@ export async function core() {
     if (!(await meilisearch.isHealthy())) {
         throw new Error("meilisearch is not healthy")
     }
-
+    const port = Number(Bun.env.PORT) || 3000
     const version = (await Bun.file(path.join(import.meta.dir, "../../package.json")).json()).version
     const startId = randomId(10)
 
@@ -50,15 +48,30 @@ export async function core() {
         })
     }
 
-    const router = new Router({
-        development: Bun.env.ENVIROMENT === "development",
-        port: Number(Bun.env.PORT) || 3000,
-        hostname: "0.0.0.0",
+    // const router = new Router({
+    //     development: Bun.env.ENVIRONMENT === "development",
+    //     port: Number(Bun.env.PORT) || 3000,
+    //     hostname: "0.0.0.0",
+    // })
 
-    })
+    const app = new Elysia()
+        .use(html())
+        .onError(({code}) => {
+            if (code === 'NOT_FOUND') return ({
+                error: true,
+                message: "route not found",
+                status: 404
+            })
 
+            return ({
+                error: true,
+                message: "Unknown error",
+                status: 500
+            })
+        })
+        .onStart(() => info(`Server started at http://0.0.0.0:${port}`))
 
-    const v1Group = new Group("/v1/")
+    const v1Group = new Elysia({prefix: "/v1"})
 
     const pureHandlers: Map<string, { handler: PureHandler<any>, path: string }> = new Map
     const handlers: Map<string, { handler: LaeticiaHandler<any, any, any>, path: string }> = new Map
@@ -92,16 +105,17 @@ export async function core() {
 
     // console.log(Bun.inspect(openApi, {depth: 8}))
 
-    const stricHandlers = (v1Group as unknown as {
-        [k: string]: (path: string, handler: Handler, options: RouteOptions) => Router
+    const elysiaHandlers = (v1Group as unknown as {
+        // [k: string]: (path: string, handler: Handler, options: RouteOptions) => Elysia
+        [k: string]: typeof app.post
     })
 
     for (const handler of pureHandlers.values()) {
-        stricHandlers[handler.handler.method.toLowerCase()](
+        elysiaHandlers[handler.handler.method.toLowerCase()](
             handler.path,
-            (ctx, meta) => {
-                return handler.handler._handler(ctx, meta)
-            }, handler.handler.options
+            (context) => {
+                return handler.handler._handler(context)
+            }
         );
 
     }
@@ -130,8 +144,8 @@ export async function core() {
             objects: heap.objectCount
         })
     })
-    v1Group.get("/docs/*", async () => html(await Bun.file(import.meta.dir + "/docs/index.html").text()))
-    v1Group.get("/docs/definition", async () => Response.json(await Bun.file(import.meta.dir + "/generated/open-api.json").json()))
+    v1Group.get("/docs", () => Bun.file(import.meta.dir + "/docs/index.html").text())
+    v1Group.get("/docs/definition", () => Bun.file(import.meta.dir + "/generated/open-api.json").json())
     v1Group.all("/core/handler/:id/paw", (ctx) => {
         const handler = pureHandlers.get(ctx.params.id)
 
@@ -161,26 +175,19 @@ export async function core() {
         }, {status: 404})
 
     })
-    v1Group.get("/core/handler", () => Response.json(Array.from(handlers).map(i => i[1].handler.id)))
+    v1Group.get("/core/handler", () => Array.from(handlers).map(i => i[1].handler.id))
 
-    router.plug(v1Group)
+    app.use(v1Group)
 
-    router.alias("/v1/docs", "/v1/docs/*")
-
-    router.get("/", () => Response.json({
+    app.get("/", () => ({
         version,
         startId
-    }), {})
-
-    router.use(404, () => Response.json({
-        error: true,
-        message: "route not found",
-        status: 404
     }))
 
-    router.get("/v1/core/heap", () => Response.json(generateHeapSnapshot()))
+    app.get("/v1/core/heap", () => generateHeapSnapshot())
 
+    app.listen(port)
 
-    return router
+    return app
 }
 

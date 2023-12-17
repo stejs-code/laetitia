@@ -1,4 +1,3 @@
-import type {Handler} from "@stricjs/router";
 import type {HttpMethod} from "~/core/utils/httpMethod.ts";
 import type {PermissionsDefinition} from "~/core/permissions.ts";
 import {Permissions} from "~/core/permissions.ts";
@@ -6,12 +5,13 @@ import {ApiContext} from "~/core/handler/apiContext.ts";
 import {ApiError} from "~/core/apiError.ts";
 import {info} from "~/core/utils/logger.ts";
 import {censor} from "~/core/utils/censor.ts";
-import type {RouteOptions} from "@stricjs/router/types/core/types";
 import type {Injectable} from "~/core/inject.ts";
 import type {OperationObject} from "openapi-typescript/src/types.ts";
 import {randomId} from "~/core/utils/randomId.ts";
+import type {Handler} from "elysia";
 
-export interface PureOptions extends RouteOptions {
+// extends RouteOptions
+export interface PureOptions {
     summary?: string,
     description?: string,
     tags?: string[],
@@ -82,12 +82,12 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
 
         this.id = "ph-" + btoa(this.method + ":" + permissionPrefix.replaceAll(".", "/") + this.url)
 
-        this._handler = async (ctx, meta) => {
+        this._handler = async (ctx) => {
             const start = Bun.nanoseconds()
             const id = randomId(10)
             try {
 
-                info(`${ctx.method} ${ctx.url} id:${id} ses:${censor(ctx.headers.get("Authorization") || "")}`)
+                info(`${ctx.request.method} ${ctx.request.url} id:${id} ses:${censor(ctx.headers.Authorization || "")}`)
                 const context = await ApiContext.init(ctx)
 
 
@@ -96,7 +96,7 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
                     return new ApiError(401, `missing permissions: ${this.permissions.required.join(", ")}`).response()
                 }
 
-                const response = await handler(ctx, meta)
+                const response = await handler(ctx)
 
                 info(`id:${id} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms err:false`)
 
