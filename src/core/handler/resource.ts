@@ -473,7 +473,7 @@ export class Resource<ZDocument extends zDocumentBase> {
 
             await this.meilisearch.tasks.waitForTask((await this.index.deleteDocument(props.id)).taskUid)
 
-            defer(() => redis.del(this.getRedisId(props.id)))
+            await redis.del(this.getRedisId(props.id))
 
             return zResponseDeleteFactory(this.zDocument).parse({
                 _index: this.index.uid,

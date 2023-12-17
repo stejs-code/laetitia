@@ -1,12 +1,10 @@
 import {describe, expect, it} from "bun:test";
-import {api, baseRequest} from "test/config.ts";
+import {api} from "test/config.ts";
 
 describe('resource', () => {
     it("crud", async () => {
 
-        const create = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
-            method: "POST",
+        const create = await api.post("/app/api-key", {
             body: {
                 author: {
                     id: 1,
@@ -19,18 +17,16 @@ describe('resource', () => {
             }
         })
 
-        if (create.error) {
+        if (create.body.error) {
             console.error(Bun.inspect(create, {depth: 10}))
         }
 
-        expect(create.message).toBeUndefined()
+        expect(create.body.message).toBeUndefined()
 
-        expect(create.id).toBeString()
+        expect(create.body.id).toBeString()
 
-        const create2 = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
-            method: "POST",
-            body: JSON.stringify({
+        const create2 = await api.post("/app/api-key", {
+            body: {
                 author: {
                     id: 1,
                     name: "Tom Stejskal"
@@ -39,63 +35,47 @@ describe('resource', () => {
                     "app.api-key.create": true
                 },
                 expiresAt: new Date()
-            })
+            }
         })
 
-        if (create2.error) {
+        if (create2.body.error) {
             console.error(create)
         }
-        expect(create2.message).toBeUndefined()
+        expect(create2.body.message).toBeUndefined()
 
-        expect(create2.id).toBeString()
+        expect(create2.body.id).toBeString()
 
-        const get = await api.json(`/v1/app/api-key/${create2.id}`, {
-            ...baseRequest,
-            method: "GET"
-        })
+        const get = await api.get(`/app/api-key/${create2.body.id}`)
 
-        if (get.error) {
+        if (get.body.error) {
             console.error(get)
         }
 
-        expect(get.message).toBeUndefined()
-        expect(get.author.name).toBe(create2.author.name)
+        expect(get.body.message).toBeUndefined()
+        expect(get.body.author.name).toBe(create2.body.author.name)
 
-        await api.json(`/v1/app/api-key/${create2.id}`, {
-            ...baseRequest,
-            method: "POST",
-            body: JSON.stringify({
+        await api.post(`/app/api-key/${create2.body.id}`, {
+            body: {
                 author: {
                     id: 2,
                     name: "Jana Braná"
                 }
-            })
+            }
         })
-        const get2 = await api.json(`/v1/app/api-key/${create2.id}`, {
-            ...baseRequest,
-            method: "GET"
-        })
+        const get2 = await api.get(`/app/api-key/${create2.body.id}`)
 
-        expect(get2.id).toEqual(create2.id)
+        expect(get2.body.id).toEqual(create2.body.id)
         expect(get2).not.toEqual(get)
 
-        await api.json(`/v1/app/api-key/${create2.id}`, {
-            ...baseRequest,
-            method: "DELETE"
-        })
+        await api.delete(`/app/api-key/${create2.body.id}`)
 
-        const get3 = await api.json(`/v1/app/api-key/${create2.id}`, {
-            ...baseRequest,
-            method: "GET"
-        })
+        const get3 = await api.get(`/app/api-key/${create2.body.id}`)
 
         expect(get3.status).toBe(404)
     })
 
     it("permissions", async () => {
-        const apiKey = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
-            method: "POST",
+        const apiKey = await api.post("/app/api-key", {
             body: {
                 author: {
                     id: 1,
@@ -109,13 +89,10 @@ describe('resource', () => {
             }
         })
 
-        const create = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
+        const create = await api.post("/app/api-key", {
             headers: {
-                ...baseRequest.headers,
-                Authorization: `Bearer ${apiKey.id}`
+                Authorization: `Bearer ${apiKey.body.id}`
             },
-            method: "POST",
             body: {
                 author: {
                     id: 1,
@@ -126,28 +103,23 @@ describe('resource', () => {
             }
         })
 
-        if (create.error) console.error(create)
-        expect(create.error).toBe(false)
+        if (create.body.error) console.error(create)
+        expect(create.body.error).toBe(false)
 
 
-        const get = await api.json(`/v1/app/api-key/${apiKey.id}`, {
-            ...baseRequest,
+        const get = await api.get(`/app/api-key/${apiKey.body.id}`, {
             headers: {
-                ...baseRequest.headers,
-                Authorization: `Bearer ${apiKey.id}`
-            },
-            method: "GET",
+                Authorization: `Bearer ${apiKey.body.id}`
+            }
         })
 
         expect(get.status).toBe(401)
-        expect(get.message).toContain("app.api-key.get")
+        expect(get.body.message).toContain("app.api-key.get")
 
     })
 
     it("versions", async () => {
-        const create = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
-            method: "POST",
+        const create = await api.post("/app/api-key", {
             body: {
                 author: {
                     id: 1,
@@ -160,12 +132,10 @@ describe('resource', () => {
             }
         })
 
-        expect(create.id).toBeString()
+        expect(create.body.id).toBeString()
 
         // meant to succeed
-        const update1 = await api.json(`/v1/app/api-key/${create.id}`, {
-            ...baseRequest,
-            method: "POST",
+        const update1 = await api.post(`/app/api-key/${create.body.id}`, {
             body: {
                 author: {
                     id: 2,
@@ -174,12 +144,10 @@ describe('resource', () => {
             }
         })
 
-        expect(update1.error).toBe(false)
+        expect(update1.body.error).toBe(false)
 
         // meant to succeed
-        const update2 = await api.json(`/v1/app/api-key/${create.id}`, {
-            ...baseRequest,
-            method: "POST",
+        const update2 = await api.post(`/app/api-key/${create.body.id}`, {
             body: {
                 version: 3,
                 author: {
@@ -189,12 +157,10 @@ describe('resource', () => {
             }
         })
 
-        expect(update2.error).toBe(false)
+        expect(update2.body.error).toBe(false)
 
         // meant not to succeed
-        const update3 = await api.json(`/v1/app/api-key/${create.id}`, {
-            ...baseRequest,
-            method: "POST",
+        const update3 = await api.post(`/app/api-key/${create.body.id}`, {
             body: {
                 version: 3,
                 author: {
@@ -204,14 +170,11 @@ describe('resource', () => {
             }
         })
 
-        expect(update3.error).toBe(true)
+        expect(update3.body.error).toBe(true)
 
-        const document = await api.json(`/v1/app/api-key/${create.id}`, {
-            ...baseRequest,
-            method: "GET"
-        })
+        const document = await api.get(`/app/api-key/${create.body.id}`)
 
-        expect(document.version).toBe(3)
+        expect(document.body.version).toBe(3)
     })
 
 });

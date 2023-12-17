@@ -1,13 +1,10 @@
 import {describe, expect, it} from "bun:test";
-import {api, baseRequest} from "test/config.ts";
-
+import {api} from "test/config.ts";
 
 
 describe("api-key", () => {
     it("expires", async () => {
-        const apiKey = await api.json("/v1/app/api-key/_new", {
-            ...baseRequest,
-            method: "POST",
+        const apiKey = await api.post("/app/api-key", {
             body: {
                 author: {
                     id: 1,
@@ -20,18 +17,14 @@ describe("api-key", () => {
             }
         })
 
-        const get = await api.json(`/v1/app/api-key/${apiKey.id}`, {
-            ...baseRequest,
+        const get = await api.get(`/app/api-key/${apiKey.body.id}`, {
             headers: {
-                ...baseRequest.headers,
-                Authorization: `Bearer ${apiKey.id}`
-            },
-            method: "GET",
+                Authorization: `Bearer ${apiKey.body.id}`
+            }
         })
 
-
-        expect(get.error).toBeTrue()
-        expect(get.message).toContain("expired")
+        expect(get.body.error).toBeTrue()
+        expect(get.body.message).toContain("expired")
     })
 
 });

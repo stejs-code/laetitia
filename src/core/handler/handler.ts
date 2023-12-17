@@ -1,6 +1,5 @@
 import type {AnyZodObject, ZodAny, ZodTypeAny} from "zod";
 import {z, ZodDefault, ZodError, ZodObject, ZodOptional} from "zod";
-import type {Context} from "@stricjs/router";
 import type {PureOptions} from "~/core/handler/pureHandler.ts";
 import {PureHandler} from "~/core/handler/pureHandler.ts";
 import type {HttpMethod} from "~/core/utils/httpMethod.ts";
@@ -16,6 +15,7 @@ import {getEmptyEquivalentZod} from "~/core/utils/getEmptyEquivalent.ts";
 import {zodToJsonSchema} from "zod-to-json-schema";
 import {ApiContext} from "~/core/handler/apiContext.ts";
 import {isDev} from "~/core/utils/general.ts";
+import type {Context} from "elysia";
 
 export interface PropLocation {
     location: "header" | "query" | "body" | "param",
@@ -143,9 +143,9 @@ export class Handler<
                     return new ApiError(500, "servers response is malformed", "zod", response.error).response()
                 }
 
-                const query = new Map(ctx.url.split("?").pop()?.split("&").map(i => i.split("=")) as Iterable<[unknown, unknown]>)
+                const query = new Map(ctx.request.url.split("?").pop()?.split("&").map(i => i.split("=")) as Iterable<[unknown, unknown]>)
 
-                const pretty = (query.has("pretty") ? query.get("pretty") !== "false" : ctx.headers.get("User-Agent")?.includes("Mozilla"))
+                const pretty = (query.has("pretty") ? query.get("pretty") !== "false" : ctx.headers["User-Agent"]?.includes("Mozilla"))
                 return new Response(JSON.stringify({
                     ...response.data,
                     error: false
@@ -191,11 +191,11 @@ export class Handler<
             const props: {
                 [key: string]: unknown
             } = {}
-            const query = new Map(ctx.url.split("?").pop()?.split("&").map(i => i.split("=")) as Iterable<[unknown, unknown]>)
+            const query = new Map(ctx.request.url.split("?").pop()?.split("&").map(i => i.split("=")) as Iterable<[unknown, unknown]>)
 
             const body = await (async function () {
                 try {
-                    return await ctx.json()
+                    return await ctx.body
                 } catch (e) {
                     return {}
                 }
@@ -203,7 +203,7 @@ export class Handler<
             _.forIn(this.propsLocation, (value, key) => {
                 switch (value.location) {
                     case "header": {
-                        props[key] = ctx.headers.get(value.label)
+                        props[key] = ctx.headers[value.label]
                         break
                     }
                     case "query": {
