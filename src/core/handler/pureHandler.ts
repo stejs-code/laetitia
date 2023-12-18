@@ -3,11 +3,8 @@ import type {PermissionsDefinition} from "~/core/permissions.ts";
 import {Permissions} from "~/core/permissions.ts";
 import {ApiContext} from "~/core/handler/apiContext.ts";
 import {ApiError} from "~/core/apiError.ts";
-import {info} from "~/core/utils/logger.ts";
-import {censor} from "~/core/utils/censor.ts";
 import type {Injectable} from "~/core/inject.ts";
 import type {OperationObject} from "openapi-typescript/src/types.ts";
-import {randomId} from "~/core/utils/randomId.ts";
 import type {Handler} from "elysia";
 import * as path from "path"
 
@@ -95,26 +92,16 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
         this.id = "ph-" + btoa(this.method + ":" + this.url)
 
         this._handler = async (ctx) => {
-            const start = Bun.nanoseconds()
-            const id = randomId(10)
             try {
 
-                info(`${ctx.request.method} ${ctx.request.url} id:${id} ses:${censor(ctx.headers.authorization || "")}`)
                 const context = await ApiContext.init(ctx)
 
-
                 if (!context.hasPermission(this.permissions.required)) {
-                    info(`id:${id} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms err:true`)
                     return new ApiError(401, `missing permissions: ${this.permissions.required.join(", ")}`).response()
                 }
 
-                const response = await handler(ctx)
-
-                info(`id:${id} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms err:false`)
-
-                return response
+                return await handler(ctx)
             } catch (e) {
-                info(`id:${id} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms err:true`)
                 if (e instanceof ApiError) return e.response()
 
                 return new ApiError(500, "unexpected server error").response()

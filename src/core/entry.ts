@@ -12,7 +12,7 @@ import {generateDocs} from "~/core/loaders/docs.ts";
 import {generatePermissionsFile} from "~/core/loaders/permissions.ts";
 import Elysia from "elysia";
 import {html} from "@elysiajs/html";
-
+import {censor} from "~/core/utils/censor.ts";
 
 export async function core() {
     const notSetEnv = [
@@ -48,12 +48,6 @@ export async function core() {
         })
     }
 
-    // const router = new Router({
-    //     development: Bun.env.ENVIRONMENT === "development",
-    //     port: Number(Bun.env.PORT) || 3000,
-    //     hostname: "0.0.0.0",
-    // })
-
     const app = new Elysia()
         .use(html())
         .onError((context) => {
@@ -71,6 +65,15 @@ export async function core() {
                 status: 500
             })
         })
+        .onRequest((ctx) => {
+            // const start = Bun.nanoseconds()
+            // id:${ctx.requestID}
+            info(`${ctx.request.method} ${ctx.request.url} ses:${censor(ctx.request.headers.get("authorization") || "")}`)
+        })
+        // .onResponse((ctx) => {
+        //     const start = requestsMap.get(ctx.requestID) || 0
+        //     info(`id:${ctx.requestID} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms`)
+        // })
         .onStart(() => info(`Server started at http://0.0.0.0:${port}`))
 
     const v1Group = new Elysia({prefix: "/v1"})
