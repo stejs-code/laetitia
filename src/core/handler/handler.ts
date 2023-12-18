@@ -177,7 +177,7 @@ export class Handler<
         this.options.schema.tags ??= []
         const tag = this.permissions.prefix?.split(".").map(i => _.upperFirst(i)).join("/")
 
-        if (isDev) info(tag + this.url)
+        if (isDev) info(tag + this.path)
 
         if (tag) this.options.schema.tags.push(tag)
     }
@@ -432,5 +432,14 @@ export class Handler<
      */
     paw(): void {
         console.log(`http://0.0.0.0:3000/v1/core/handler/${this.id}/paw`)
+    }
+
+    export(){
+        return {
+            ...super.export(),
+            propLocation: this.propsLocation,
+            props: zodToJsonSchema(this.zProps),
+            response: zodToJsonSchema(this.zResponse),
+        }
     }
 }

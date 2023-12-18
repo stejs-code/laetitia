@@ -9,6 +9,7 @@ import type {Injectable} from "~/core/inject.ts";
 import type {OperationObject} from "openapi-typescript/src/types.ts";
 import {randomId} from "~/core/utils/randomId.ts";
 import type {Handler} from "elysia";
+import * as path from "path"
 
 // extends RouteOptions
 export interface PureOptions {
@@ -26,21 +27,31 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
      * Base64 encoded method+url
      */
     id: string
+
     /**
      * Relative path to handler
      */
+    path: string;
+
+    /**
+     * final url
+     */
     url: string;
+
     /**
      * Method
      * e. g. GET, POST, ...
      */
     method: HttpMethod;
+
     /**
      * Already prefixed Permissions object
      */
     permissions: Permissions;
+
     _handler: Handler
     description: string
+
     /**
      * Gets injections list for this handler
      */
@@ -56,7 +67,7 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
     ) {
         this.getInjections = typeof getInjections === "function" ? getInjections : () => getInjections
 
-        const permissionPrefix = new Error()
+        const absolutePath = new Error()
             .stack
             ?.split("\n")
             .reverse()
@@ -67,20 +78,21 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
             ?.split(":")[0]
             ?.substring((Bun.env.CORE_ENDPOINTS_DIR?.length || 0) + 1)
             .split(".")[0]
-            ?.split("/")
-            .join(".") as string
+            ?.split("/") as string[]
 
         this.description = options.description || ""
 
         this.method = method;
-        this.url = url;
+        this.path = url;
 
+        // to remove trailing slashes
+        this.url = path.join("/", absolutePath.join("/"), url).replace(/\/$/, "")
         this.options.schema.tags ??= []
-        this.options.schema.tags.push(permissionPrefix.replaceAll(".", "/"))
+        this.options.schema.tags.push(absolutePath.join("/"))
 
-        this.permissions = new Permissions(permissions, permissionPrefix);
+        this.permissions = new Permissions(permissions, absolutePath.join("."));
 
-        this.id = "ph-" + btoa(this.method + ":" + permissionPrefix.replaceAll(".", "/") + this.url)
+        this.id = "ph-" + btoa(this.method + ":" + this.url)
 
         this._handler = async (ctx) => {
             const start = Bun.nanoseconds()
@@ -109,6 +121,16 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
             }
         }
 
+    }
+
+    export() {
+        return {
+            id: this.id,
+            method: this.method,
+            url: this.path,
+            permissions: this.permissions,
+            description: this.description
+        }
     }
 
 }

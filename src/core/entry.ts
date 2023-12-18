@@ -85,7 +85,7 @@ export async function core() {
             if (exportedValue instanceof PureHandler) {
                 pureHandlers.set(exportedValue.id, {
                     handler: exportedValue,
-                    path: path.join("/", path.parse(moduleObject.path).dir, path.parse(moduleObject.path).name, exportedValue.url),
+                    path: path.join("/", path.parse(moduleObject.path).dir, path.parse(moduleObject.path).name, exportedValue.path),
                 })
 
                 permissions.push(...exportedValue.permissions.required)
@@ -167,7 +167,7 @@ export async function core() {
         const handler = pureHandlers.get(ctx.params.id)
 
         if (handler) {
-            return Response.json(handler.handler)
+            return Response.json(handler.handler.export())
         }
 
         return Response.json({
