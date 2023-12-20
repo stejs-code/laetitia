@@ -39,7 +39,6 @@ describe("user", () => {
         const get = await api.get(`/user/user/${user.body.id}`)
 
 
-
         if (get.body.error) console.error(Bun.inspect(get, {depth: 6}))
 
 
@@ -48,4 +47,25 @@ describe("user", () => {
 
 
     });
+
+    it("two at once", async () => {
+        const create1 = api.post("/user/user", {
+            body: {
+                firstname: "Tom",
+                lastname: "Stejskal"
+            }
+        })
+
+
+        const create2 = api.post("/user/user", {
+            body: {
+                firstname: "Tom",
+                lastname: "Stejskal"
+            }
+        });
+
+        const responses = await Promise.all([create1, create2]);
+        expect(responses[0].body.id).not.toBe(responses[1].body.id)
+
+    })
 });
