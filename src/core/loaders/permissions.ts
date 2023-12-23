@@ -1,5 +1,7 @@
 import path from "path";
 import fs from "fs";
+import template from "~/core/loaders/permissions.template.txt"
+
 
 export async function generatePermissionsFile(permissions: string[]) {
     const lines = new Set<string>
@@ -8,13 +10,7 @@ export async function generatePermissionsFile(permissions: string[]) {
         lines.add(`    "${permission}": z.boolean().default(false),`)
     }
 
-    // language=TS
-    const fileContent = 'import {z} from "zod" \n \n' +
-        'export const permissionsZod = z.object({\n' +
-        Array.from(lines.values()).join("\n") +
-        '\n});\n\n' +
-        'export type Permissions = z.infer<typeof permissionsZod>'
-
+    const fileContent = template.replace("$$ZOD_ROWS$$", Array.from(lines.values()).join("\n"))
 
     const pathToFile = path.join(import.meta.dir, "../generated/permissions.ts")
     const fileExists = await fs.promises.exists(pathToFile)

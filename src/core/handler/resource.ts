@@ -1,4 +1,5 @@
 import type {AnyZodObject} from "zod";
+import { ZodArray, ZodObject} from "zod";
 import {z, ZodError} from "zod";
 import type {HandlerFunction} from "~/core/handler/handler.ts";
 import {meilisearch} from "~/core/provider/meilisearch.ts";
@@ -16,12 +17,15 @@ import {redis} from "~/core/provider/redis.ts";
 import type {RedisClientType} from "redis";
 import {safeAsync} from "~/core/utils/safe.ts";
 import StatusCode from "status-code-enum";
+import type {ServerFunction} from "~/core/handler/function.ts";
+import {ApiContext} from "~/core/handler/apiContext.ts";
+import {unwrapZod} from "~/core/utils/zod.ts";
 
 export const zCreatedAt = z.coerce.date().describe("date of the document creation")
 
 export const zUpdatedAt = z.coerce.date().describe("date of the last document update")
 
-export const zVersion = z.number().min(1)
+export const zVersion = z.number().min(0)
 
 export const zMeilisearchDocument = z.object({
     // id: z.string() as z.ZodString | z.ZodNumber,
@@ -137,22 +141,58 @@ export const zResponseBulkCreate = function () {
 export type ResourceSettings<ZDocument extends zDocumentBase> = {
     description?: string
 
+    dependantFields?: Partial<{
+        [Key in keyof ZDocument["shape"]]: {
+            resourceId: string,
+            // @ts-expect-error WTF, if you use "keyof" to index shape, then why is typescript mad that "There could be other type", it's fucking nonsense...
+            transform: (document: any) => z.input<ZDocument["shape"][Key]>
+        }
+    }>
+    // dependantFields?: { [Key in keyof ZDocument["shape"]]: [Resource<any>, () => z.input<ZDocument["shape"][Key]>] }
+
+    // getRelations?:() => MaybePromise<Partial<{ [Key in keyof ZDocument["shape"]]: { class: Resource<any>, transformer: (document: any) => z.input<ZDocument["shape"][Key]> } }>>
+
     secretFields?: Partial<z.infer<ZDocument>>
 
-    onGet?: (
-        props: z.infer<ReturnType<typeof zPropsGetFactory<ZDocument>>>,
-        next: ShortHandlerFunction<typeof zPropsGetFactory<ZDocument>, typeof zResponseGetFactory<ZDocument>>)
-        => MaybePromise<z.infer<ReturnType<typeof zResponseGetFactory<ZDocument>>>>
+    // onGet?: (
+    //     props: z.infer<ReturnType<typeof zPropsGetFactory<ZDocument>>>,
+    //     next: ShortHandlerFunction<typeof zPropsGetFactory<ZDocument>, typeof zResponseGetFactory<ZDocument>>)
+    //     => MaybePromise<z.infer<ReturnType<typeof zResponseGetFactory<ZDocument>>>>
 
-    onUpdate?: (
-        props: z.infer<ReturnType<typeof zPropsUpdateFactory<ZDocument>>>,
-        next: ShortHandlerFunction<typeof zPropsUpdateFactory<ZDocument>, typeof zResponseUpdateFactory<ZDocument>>)
-        => MaybePromise<z.infer<ReturnType<typeof zResponseUpdateFactory<ZDocument>>>>
+    onGet?: ServerFunction<
+        z.infer<ReturnType<typeof zPropsGetFactory<ZDocument>>> & {
+        next: ShortHandlerFunction<typeof zPropsGetFactory<ZDocument>, typeof zResponseGetFactory<ZDocument>>
+    },
+        MaybePromise<z.infer<ReturnType<typeof zResponseGetFactory<ZDocument>>>>,
+        {}
+    >
 
-    onDelete?: (
-        props: z.infer<ReturnType<typeof zPropsDeleteFactory<ZDocument>>>,
-        next: ShortHandlerFunction<typeof zPropsDeleteFactory<ZDocument>, typeof zResponseDeleteFactory<ZDocument>>)
-        => MaybePromise<z.infer<ReturnType<typeof zResponseDeleteFactory<ZDocument>>>>
+    // onUpdate?: (
+    //     props: z.infer<ReturnType<typeof zPropsUpdateFactory<ZDocument>>>,
+    //     next: ShortHandlerFunction<typeof zPropsUpdateFactory<ZDocument>, typeof zResponseUpdateFactory<ZDocument>>)
+    //     => MaybePromise<z.infer<ReturnType<typeof zResponseUpdateFactory<ZDocument>>>>
+
+    onUpdate?: ServerFunction<
+        z.infer<ReturnType<typeof zPropsUpdateFactory<ZDocument>>> & {
+        next: ShortHandlerFunction<typeof zPropsUpdateFactory<ZDocument>, typeof zResponseUpdateFactory<ZDocument>>
+    },
+        MaybePromise<z.infer<ReturnType<typeof zResponseUpdateFactory<ZDocument>>>>,
+        {}
+    >
+
+    // onDelete?: (
+    //     props: z.infer<ReturnType<typeof zPropsDeleteFactory<ZDocument>>>,
+    //     next: ShortHandlerFunction<typeof zPropsDeleteFactory<ZDocument>, typeof zResponseDeleteFactory<ZDocument>>)
+    //     => MaybePromise<z.infer<ReturnType<typeof zResponseDeleteFactory<ZDocument>>>>
+
+    onDelete?: ServerFunction<
+        z.infer<ReturnType<typeof zPropsDeleteFactory<ZDocument>>> & {
+        original: z.infer<ZDocument>,
+        next: ShortHandlerFunction<typeof zPropsDeleteFactory<ZDocument>, typeof zResponseDeleteFactory<ZDocument>>
+    },
+        MaybePromise<z.infer<ReturnType<typeof zResponseDeleteFactory<ZDocument>>>>,
+        {}
+    >
 }
 
 export type InputReturnType<T extends (...args: never[]) => AnyZodObject> = z.input<ReturnType<T>>
@@ -162,6 +202,7 @@ export class Resource<ZDocument extends zDocumentBase> {
     private readonly index: Index<z.infer<ZDocument> & z.infer<typeof zMeilisearchDocument>>;
     private meilisearch: MeiliSearch;
     private redis: RedisClientType;
+    public dependentsSet = new Set<Omit<DependencyType<any, any>, "resourceId"> & { resource: Resource<any> }>
 
     constructor(
         public zDocument: ZDocument,
@@ -173,6 +214,11 @@ export class Resource<ZDocument extends zDocumentBase> {
         this.meilisearch = meilisearch
         this.index = meilisearch.index(getIndexName(indexSettings.name))
         this.redis = redis
+
+        indexSettings.filterableAttributes = Array.from(new Set([
+            ...indexSettings.filterableAttributes || [],
+            ...this.getDependencies().map(i => i.field + ".id")]
+        ))
 
         defer(async () => {
             // ensure, that index exists
@@ -222,8 +268,9 @@ export class Resource<ZDocument extends zDocumentBase> {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async setToRedis(document: MeilisearchDocument<ZDocument>) {
-        await this.redis.set(this.getRedisId(document.id), JSON.stringify(document))
+        // await this.redis.set(this.getRedisId(document.id), JSON.stringify(document))
     }
 
     getRedisId(id: number | string) {
@@ -234,7 +281,10 @@ export class Resource<ZDocument extends zDocumentBase> {
         try {
             if (this.settings.onGet) {
                 const props = zPropsGetFactory(this.zDocument).parse(inputProps, {path: ["resource", "get", "inputProps"]})
-                return this.settings.onGet(props, this.getWithoutEvent)
+                return this.settings.onGet.prepare(ApiContext.superUser())({
+                    ...props,
+                    next: this.getWithoutEvent
+                })
             }
             return this.getWithoutEvent(inputProps)
 
@@ -354,7 +404,7 @@ export class Resource<ZDocument extends zDocumentBase> {
                     id,
                     createdAt: new Date(),
                     updatedAt: new Date(),
-                    version: 1
+                    version: 0
                 },
                 id
             }
@@ -404,7 +454,11 @@ export class Resource<ZDocument extends zDocumentBase> {
         try {
             if (this.settings.onUpdate) {
                 const props = zPropsUpdateFactory(this.zDocument).parse(inputProps, {path: ["resource", "update", "inputProps"]})
-                return this.settings.onUpdate(props, this.updateWithoutEvent)
+
+                return this.settings.onUpdate.prepare(ApiContext.superUser())({
+                    ...props,
+                    next: this.updateWithoutEvent
+                })
             }
 
             return this.updateWithoutEvent(inputProps)
@@ -428,6 +482,7 @@ export class Resource<ZDocument extends zDocumentBase> {
                 id: props.id
             }), undefined)
 
+            // TODO: are dependencies up to date????? Client could have sent wrong data.
 
             if (previousDocument?.version && props.data.version) this.compareVersions(previousDocument.version, props.data.version)
 
@@ -442,6 +497,39 @@ export class Resource<ZDocument extends zDocumentBase> {
 
             defer(() => {
                 this.setToRedis(document)
+
+                this.dependentsSet.forEach(async ({resource, transform, field}) => {
+                    const transformed = transform(document)
+
+                    const response = (await resource.index.search("", {
+                        attributesToRetrieve: ["id", field],
+                        filter: [`${field}.id = ${document.id}`],
+                        limit: 1000, // TODO: more than 1000
+                    })).hits.map(i => {
+                        if (unwrapZod(resource.zDocument.shape[field]) instanceof ZodObject) {
+                            return {
+                                ...i,
+                                [field]: transformed,
+                            }
+                        }
+
+                        if (unwrapZod(resource.zDocument.shape[field]) instanceof ZodArray) {
+                            return {
+                                ...i,
+                                [field]: i[field]?.map((j: { id: string | number }) => {
+                                    if (j.id === document.id) {
+                                        return transformed
+                                    }
+
+                                    return j
+                                })
+                            }
+                        }
+                    })
+
+                    await resource.index.updateDocumentsInBatches(response, 200)
+
+                })
             })
 
             await this.meilisearch.tasks.waitForTask((await this.index.updateDocuments([document])).taskUid)
@@ -543,4 +631,51 @@ export class Resource<ZDocument extends zDocumentBase> {
         }
     }
 
+    /**
+     *
+     * @param resource The one to change
+     * @param dependent
+     */
+    addDependent(resource: Resource<any>, dependent: DependencyType<ZDocument, any>) {
+        this.dependentsSet.add({
+            resource,
+            transform: dependent.transform,
+            field: dependent.field
+        })
+    }
+
+
+    getDependencies() {
+        return Object.entries(this.settings.dependantFields || {}).map(([k, v]): DependencyType<any, any> => ({
+            resourceId: v.resourceId,
+            transform: v.transform,
+            field: k
+        }))
+    }
+}
+
+export type DependencyType<X, Y> = {
+    resourceId: string,
+    field: string,
+    transform: (document: X) => Y,
+}
+
+
+/**
+ *
+ * @param resourceId This is the name with which is the resource exported from /endpoints directory
+ * @param transform
+ * @param validator
+ */
+export function dependency<
+    Dependent extends { id: number | string },
+    Validator extends AnyZodObject
+>(resourceId: string, transform: DependencyType<z.infer<Validator>, Dependent>["transform"], validator?: Validator): Omit<DependencyType<z.infer<Validator>, Dependent>, "field"> {
+    return {
+        resourceId,
+        transform(doc) {
+            validator?.parse(doc)
+            return transform(doc)
+        }
+    }
 }

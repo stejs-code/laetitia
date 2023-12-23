@@ -1,4 +1,5 @@
 import {
+    dependency,
     Resource,
     zPropsCreateFactory, zPropsDeleteFactory,
     zPropsGetFactory, zPropsSearchFactory, zPropsUpdateFactory, zResponseDeleteFactory,
@@ -26,6 +27,11 @@ export const apiKey = new Resource(
         name: "api-key",
         filterableAttributes: ["author.id"]
     },
+    {
+        dependantFields: {
+            author: dependency("user", ({id, name}) => ({id, name}))
+        }
+    }
 )
 
 export const getApiKey = new Handler(
@@ -39,7 +45,6 @@ export const getApiKey = new Handler(
     }),
     "get",
     apiKey.get,
-
 )
 
 export const searchApiKey = new Handler(

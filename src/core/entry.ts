@@ -13,6 +13,7 @@ import {generatePermissionsFile} from "~/core/loaders/permissions.ts";
 import Elysia from "elysia";
 import {html} from "@elysiajs/html";
 import {censor} from "~/core/utils/censor.ts";
+import {Resource} from "~/core/handler/resource.ts";
 
 export async function core() {
     const notSetEnv = [
@@ -80,11 +81,12 @@ export async function core() {
 
     const pureHandlers: Map<string, { handler: PureHandler<any>, path: string }> = new Map
     const handlers: Map<string, { handler: LaeticiaHandler<any, any, any>, path: string }> = new Map
+    const resourcesMap = new Map<string, Resource<any>>
 
     for (const moduleObject of moduleObjects) {
         let found = false
 
-        for (const [, exportedValue] of Object.entries(moduleObject.module)) {
+        for (const [key, exportedValue] of Object.entries(moduleObject.module)) {
             if (exportedValue instanceof PureHandler) {
                 pureHandlers.set(exportedValue.id, {
                     handler: exportedValue,
@@ -103,12 +105,36 @@ export async function core() {
                     path: moduleObject.path
                 })
             }
+
+            if (exportedValue instanceof Resource) {
+                if (resourcesMap.has(key)) warn(`Multiple instances of Resource with name "${key}", this will lead to errors`)
+
+                resourcesMap.set(key, exportedValue)
+            }
         }
 
         if (!found) warn(`Module "${moduleObject.path}" does not export any handler`)
     }
 
-    // console.log(Bun.inspect(openApi, {depth: 8}))
+    let nOfDependencies = 0
+
+    // Load connections across resources
+    resourcesMap.forEach((value, key) => {
+        value.getDependencies().forEach(i => {
+            const resource = resourcesMap.get(i.resourceId)
+            if (!resource) return warn(`Referencing unknown resource "${i.resourceId}" in "${key}" resource`)
+            resource.addDependent(value, i)
+            nOfDependencies++
+        })
+    })
+
+    info(`Successfully mounted ${nOfDependencies} dependencies`)
+
+    // Get Dependencies
+    // resourcesMap.forEach(value => {
+    //     // @ts-ignore
+    //     console.log(value.index.uid, Array.from(value.dependentsSet.values()).map(i =>[i.resource.index.uid, i.field]))
+    // })
 
     const elysiaHandlers = (v1Group as unknown as {
         // [k: string]: (path: string, handler: Handler, options: RouteOptions) => Elysia

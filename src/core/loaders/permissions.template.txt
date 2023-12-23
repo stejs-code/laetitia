@@ -1,0 +1,11 @@
+import {z} from "zod";
+
+export const permissionsZod = z.object({
+$$ZOD_ROWS$$
+});
+
+export type PermissionsType = z.infer<typeof permissionsZod>
+
+export const allTruePermissions = Object.fromEntries(
+    Object.entries(permissionsZod.parse({})).map(([k]) => ([k, true]))
+) as {[key in keyof PermissionsType]: true}

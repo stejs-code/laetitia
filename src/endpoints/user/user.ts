@@ -1,4 +1,5 @@
 import {
+    dependency,
     Resource,
     zPropsCreateFactory,
     zPropsDeleteFactory,
@@ -12,7 +13,8 @@ import {
 } from "~/core/handler/resource.ts";
 import {z} from "zod";
 import {Handler} from "~/core/handler/handler.ts";
-import {createApiKey} from "~/endpoints/app/api-key.ts";
+import {ServerFunction} from "~/core/handler/function.ts";
+import {userGroup} from "~/endpoints/user/group.ts";
 
 export const userZod = z.object({
     id: z.number(),
@@ -23,12 +25,19 @@ export const userZod = z.object({
         id: z.number(),
         name: z.string()
     }).nullish(),
+    group: z.object({
+        id: z.number(),
+        name: z.string()
+    }).default({
+        id: 1,
+        name: "uživatel"
+    }),
     title: z.string().optional(),
     password: z.string().min(4).nullish(),
     email: z.string().email().nullish(),
 })
 
-export type user = z.infer<typeof userZod>
+export type UserType = z.infer<typeof userZod>
 
 export const user = new Resource(
     userZod,
@@ -37,6 +46,15 @@ export const user = new Resource(
         filterableAttributes: ["author.id"]
     },
     {
+        dependantFields: {
+            group: dependency("userGroup", ({id, name}) => ({
+                id: id,
+                name: name
+            }),)
+        },
+        onGet: new ServerFunction((props) => {
+            return props.next(props)
+        }, {}),
         secretFields: {
             password: "**secret**"
         }
@@ -95,9 +113,6 @@ export const createUser = new Handler(
                 name: props.data.firstname + " " + props.data.lastname
             }
         })
-    },
-    {
-        createApiKey: createApiKey
     }
 )
 

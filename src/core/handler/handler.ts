@@ -38,7 +38,7 @@ export type InjectList = { [k: string]: Injectable }
 export type Dependencies<Inject extends InjectList> = Inject extends never
     ? any
     : {
-        [Key in keyof Inject]: OuterHandlerFunction<Inject[Key]["zProps"], Inject[Key]["zResponse"]>
+        [Key in keyof Inject]: PrepareReturn<Inject[Key]["zProps"], Inject[Key]["zResponse"]>
     }
 
 
@@ -95,6 +95,10 @@ export type HandlerAugmentation<ZProps extends AnyZodObject, ZResponse extends A
     getPropLocations?: undefined
 })
 
+export type PrepareReturn<T extends AnyZodObject, Y extends AnyZodObject> = {
+    asSuper: OuterHandlerFunction<T, Y>,
+    asOriginal: OuterHandlerFunction<T, Y>,
+}
 
 /**
  * High-end network access, recommended
@@ -136,7 +140,7 @@ export class Handler<
             try {
                 const props = await this.transformProps(ctx)
                 const context = await ApiContext.init(ctx)
-                const handler = this.prepare(context)
+                const handler = this.prepare(context).asOriginal
                 const response = this.zResponse.safeParse(await handler(props))
 
                 if (!response.success) {
@@ -177,7 +181,7 @@ export class Handler<
         this.options.schema.tags ??= []
         const tag = this.permissions.prefix?.split(".").map(i => _.upperFirst(i)).join("/")
 
-        if (isDev) info(tag + this.path)
+        if (isDev) info(tag?.toLowerCase() + this.path)
 
         if (tag) this.options.schema.tags.push(tag)
     }
@@ -269,7 +273,7 @@ export class Handler<
     }
 
     /**
-     *
+     * // TODO: make use of url and method -> path
      * @param url with /:id type params
      * @param method
      * @param zProps
@@ -341,7 +345,7 @@ export class Handler<
      * @param handler
      * @param path
      */
-    static generateCurlRequest(handler: Handler<any, any, any>, path: string): string {
+    static generateCurlRequest(handler: AnyHandler, path: string): string {
         let curl = `curl -X ${handler.method}`
         let url = Bun.env.HOST + path
         let body: Record<string, unknown> = {}
@@ -362,7 +366,7 @@ export class Handler<
 
             if (handler.propsLocation[key].location === "query") {
                 if (!url.endsWith("?")) url += "?"
-                url += `${handler.propsLocation[key].label}=${encodeURIComponent(getEmptyEquivalentZod(field) as any)}&`
+                url += `${handler.propsLocation[key].label}=${encodeURIComponent(getEmptyEquivalentZod(field) as never)}&`
             }
 
             if (handler.propsLocation[key].location === "body") {
@@ -406,8 +410,9 @@ export class Handler<
         }
     }
 
-    prepare(ctx: ApiContext): HandlerFunction<ZProps, ZResponse> {
-        return async (props: z.input<ZProps>) => {
+    prepare(ctx: ApiContext): PrepareReturn<ZProps, ZResponse> {
+
+        const run = async (props: z.input<ZProps>, context: ApiContext) => {
             const injections = await this.getInjections()
 
             const dependencies: Partial<Dependencies<Injections>> = {}
@@ -416,13 +421,22 @@ export class Handler<
                 // It works, so leave it like that
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                 // @ts-ignore
-                dependencies[key] = injections[key].prepare(ctx)
+                dependencies[key] = injections[key].prepare(context)
             }
 
             return this.zResponse.parse(await this.handler(
                 this.zProps.parse(props),
                 dependencies as Dependencies<Injections>
             ))
+        }
+
+        return {
+            asSuper(props) {
+                return run(props, ApiContext.superUser())
+            },
+            asOriginal(props) {
+                return run(props, ctx)
+            }
         }
     }
 
@@ -434,7 +448,7 @@ export class Handler<
         console.log(`http://0.0.0.0:3000/v1/core/handler/${this.id}/paw`)
     }
 
-    export(){
+    export() {
         return {
             ...super.export(),
             propLocation: this.propsLocation,
@@ -443,3 +457,7 @@ export class Handler<
         }
     }
 }
+
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyHandler = Handler<any, any, any>
