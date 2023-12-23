@@ -328,7 +328,7 @@ export class Resource<ZDocument extends zDocumentBase> {
             }, {path: ["resource", "getWithoutEvent", "response"]})
         } catch (e) {
             if (e instanceof MeiliSearchApiError) {
-                throw new ApiError(404, "not found", undefined, this)
+                throw new ApiError(404, "not found")
             }
 
             if (e instanceof ZodError) {

@@ -114,7 +114,7 @@ export class PureHandler<Injections extends { [k: string]: Injectable }> {
         return {
             id: this.id,
             method: this.method,
-            url: this.path,
+            url: this.url,
             permissions: this.permissions,
             description: this.description
         }

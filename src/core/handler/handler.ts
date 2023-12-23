@@ -451,7 +451,7 @@ export class Handler<
     export() {
         return {
             ...super.export(),
-            propLocation: this.propsLocation,
+            propsLocation: this.propsLocation,
             props: zodToJsonSchema(this.zProps),
             response: zodToJsonSchema(this.zResponse),
         }

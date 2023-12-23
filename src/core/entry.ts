@@ -14,6 +14,9 @@ import Elysia from "elysia";
 import {html} from "@elysiajs/html";
 import {censor} from "~/core/utils/censor.ts";
 import {Resource} from "~/core/handler/resource.ts";
+import {isDev} from "~/core/utils/general.ts";
+import {defer} from "~/core/utils/defer.ts";
+import {emitKeypressEvents} from "readline";
 
 export async function core() {
     const notSetEnv = [
@@ -79,7 +82,7 @@ export async function core() {
 
     const v1Group = new Elysia({prefix: "/v1"})
 
-    const pureHandlers: Map<string, { handler: PureHandler<any>, path: string }> = new Map
+    const pureHandlers: Map<string, { handler: PureHandler<any>, path: string, key: string }> = new Map
     const handlers: Map<string, { handler: LaeticiaHandler<any, any, any>, path: string }> = new Map
     const resourcesMap = new Map<string, Resource<any>>
 
@@ -89,6 +92,7 @@ export async function core() {
         for (const [key, exportedValue] of Object.entries(moduleObject.module)) {
             if (exportedValue instanceof PureHandler) {
                 pureHandlers.set(exportedValue.id, {
+                    key: key,
                     handler: exportedValue,
                     path: path.join("/", path.parse(moduleObject.path).dir, path.parse(moduleObject.path).name, exportedValue.path),
                 })
@@ -196,7 +200,10 @@ export async function core() {
         const handler = pureHandlers.get(ctx.params.id)
 
         if (handler) {
-            return Response.json(handler.handler.export())
+            return Response.json({
+                ...handler.handler.export(),
+                key: handler.key
+            })
         }
 
         return Response.json({
@@ -218,6 +225,23 @@ export async function core() {
     app.get("/v1/core/heap", () => generateHeapSnapshot())
 
     app.listen(port)
+
+    defer(async () => {
+        if (isDev) {
+            try {
+                const response = await fetch("http://localhost:3777/reload", {
+                    method: "POST",
+                })
+
+                if ((response.status - 200) < 100) {
+                    info(`Reloaded client server`)
+                }
+            } catch (e) {
+                warn(`No client server was found`)
+            }
+        }
+    })
+
 
     return app
 }
