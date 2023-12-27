@@ -1,6 +1,11 @@
 import {z} from "zod";
 
 export const permissionsZod = z.object({
+    "app.session.create": z.boolean().default(false),
+    "app.session.delete": z.boolean().default(false),
+    "app.session.get": z.boolean().default(false),
+    "app.session.login": z.boolean().default(false),
+    "app.session.update": z.boolean().default(false),
     "app.api-key.create": z.boolean().default(false),
     "app.api-key.delete": z.boolean().default(false),
     "app.api-key.get": z.boolean().default(false),

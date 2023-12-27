@@ -53,10 +53,10 @@ export const zPropsGetFactory = function <ZDocument extends zDocumentBase>(doc: 
 }
 
 export const zResponseGetFactory = function <ZDocument extends zDocumentBase>(doc: ZDocument) {
-    return doc.merge(zMeilisearchDocument).merge(z.object({
+    return zMeilisearchDocument.merge(z.object({
         _cache: z.boolean(),
         _index: z.string(),
-    }))
+    })).merge(doc)
 }
 
 
@@ -72,7 +72,7 @@ export const zPropsSearchFactory = function () {
 
 export const zResponseSearchFactory = function <ZDocument extends zDocumentBase>(doc: ZDocument) {
     return z.object({
-        hits: doc.merge(zMeilisearchDocument).array(),
+        hits: zMeilisearchDocument.merge(doc).array(),
     })
 }
 
@@ -103,9 +103,9 @@ export const zPropsUpdateFactory = function <ZDocument extends zDocumentBase>(do
 }
 
 export const zResponseUpdateFactory = function <ZDocument extends zDocumentBase>(doc: ZDocument) {
-    return doc.merge(z.object({
+    return z.object({
         _index: z.string(),
-    }))
+    }).merge(doc)
 }
 
 // Response same as update
@@ -161,7 +161,7 @@ export type ResourceSettings<ZDocument extends zDocumentBase> = {
 
     onGet?: ServerFunction<
         z.infer<ReturnType<typeof zPropsGetFactory<ZDocument>>> & {
-        next: ShortHandlerFunction<typeof zPropsGetFactory<ZDocument>, typeof zResponseGetFactory<ZDocument>>
+        next: ShortHandlerFunction<typeof zPropsGetFactory<never>, typeof zResponseGetFactory<never>>
     },
         MaybePromise<z.infer<ReturnType<typeof zResponseGetFactory<ZDocument>>>>,
         {}
@@ -174,7 +174,7 @@ export type ResourceSettings<ZDocument extends zDocumentBase> = {
 
     onUpdate?: ServerFunction<
         z.infer<ReturnType<typeof zPropsUpdateFactory<ZDocument>>> & {
-        next: ShortHandlerFunction<typeof zPropsUpdateFactory<ZDocument>, typeof zResponseUpdateFactory<ZDocument>>
+        next: ShortHandlerFunction<typeof zPropsUpdateFactory<never>, typeof zResponseUpdateFactory<never>>
     },
         MaybePromise<z.infer<ReturnType<typeof zResponseUpdateFactory<ZDocument>>>>,
         {}
@@ -196,7 +196,7 @@ export type ResourceSettings<ZDocument extends zDocumentBase> = {
 }
 
 export type InputReturnType<T extends (...args: never[]) => AnyZodObject> = z.input<ReturnType<T>>
-export type InferReturnType<T extends (...args: never[]) => AnyZodObject> = z.input<ReturnType<T>>
+export type InferReturnType<T extends (...args: never[]) => AnyZodObject> = z.infer<ReturnType<T>>
 
 export class Resource<ZDocument extends zDocumentBase> {
     private readonly index: Index<z.infer<ZDocument> & z.infer<typeof zMeilisearchDocument>>;
@@ -277,7 +277,7 @@ export class Resource<ZDocument extends zDocumentBase> {
         return this.index.uid + ":" + id
     }
 
-    get = async (inputProps: InputReturnType<typeof zPropsGetFactory<ZDocument>>): Promise<InferReturnType<typeof zResponseGetFactory<ZDocument>>> => {
+    get = async (inputProps: InputReturnType<typeof zPropsGetFactory<never>>): Promise<InferReturnType<typeof zResponseGetFactory<never>>> => {
         try {
             if (this.settings.onGet) {
                 const props = zPropsGetFactory(this.zDocument).parse(inputProps, {path: ["resource", "get", "inputProps"]})
@@ -299,7 +299,7 @@ export class Resource<ZDocument extends zDocumentBase> {
 
     }
 
-    getWithoutEvent = async (inputProps: InputReturnType<typeof zPropsGetFactory<ZDocument>>): Promise<InferReturnType<typeof zResponseGetFactory<ZDocument>>> => {
+    getWithoutEvent = async (inputProps: InputReturnType<typeof zPropsGetFactory<never>>): Promise<InferReturnType<typeof zResponseGetFactory<never>>> => {
         try {
             const props = zPropsGetFactory(this.zDocument).parse(inputProps, {path: ["resource", "getWithoutEvent", "inputProps"]})
 
@@ -341,7 +341,7 @@ export class Resource<ZDocument extends zDocumentBase> {
     }
 
 
-    search = async (inputProps: InputReturnType<typeof zPropsSearchFactory>): Promise<InferReturnType<typeof zResponseSearchFactory<ZDocument>>> => {
+    search = async (inputProps: InputReturnType<typeof zPropsSearchFactory>): Promise<InferReturnType<typeof zResponseSearchFactory<never>>> => {
         try {
             const props = zPropsSearchFactory().parse(inputProps, {path: ["resource", "search", "inputProps"]})
 
@@ -450,7 +450,7 @@ export class Resource<ZDocument extends zDocumentBase> {
     //
     // }
 
-    update = async (inputProps: InputReturnType<typeof zPropsUpdateFactory<ZDocument>>): Promise<InferReturnType<typeof zResponseUpdateFactory<ZDocument>>> => {
+    update = async (inputProps: InputReturnType<typeof zPropsUpdateFactory<never>>): Promise<InferReturnType<typeof zResponseUpdateFactory<never>>> => {
         try {
             if (this.settings.onUpdate) {
                 const props = zPropsUpdateFactory(this.zDocument).parse(inputProps, {path: ["resource", "update", "inputProps"]})
@@ -474,7 +474,7 @@ export class Resource<ZDocument extends zDocumentBase> {
         }
     }
 
-    protected updateWithoutEvent = async (inputProps: InputReturnType<typeof zPropsUpdateFactory<ZDocument>>): Promise<InferReturnType<typeof zResponseUpdateFactory<ZDocument>>> => {
+    protected updateWithoutEvent = async (inputProps: InputReturnType<typeof zPropsUpdateFactory<never>>): Promise<InferReturnType<typeof zResponseUpdateFactory<never>>> => {
         try {
             const props = zPropsUpdateFactory(this.zDocument).parse(inputProps, {path: ["resource", "updateWithoutEvent", "inputProps"]})
             // * if previousDocument is undefined, then it's obvious that the document doesn't exist yet

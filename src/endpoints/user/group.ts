@@ -28,6 +28,11 @@ export const userGroupZod = z.object({
 
 export type UserGroup = z.infer<typeof userGroupZod>
 
+export const defaultGroup = {
+    id: 1,
+    name: "uživatel"
+}
+
 export const userGroup = new Resource(
     userGroupZod,
     {

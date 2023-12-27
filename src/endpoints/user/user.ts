@@ -14,7 +14,6 @@ import {
 import {z} from "zod";
 import {Handler} from "~/core/handler/handler.ts";
 import {ServerFunction} from "~/core/handler/function.ts";
-import {userGroup} from "~/endpoints/user/group.ts";
 
 export const userZod = z.object({
     id: z.number(),
@@ -35,6 +34,7 @@ export const userZod = z.object({
     title: z.string().optional(),
     password: z.string().min(4).nullish(),
     email: z.string().email().nullish(),
+    code: z.string().nullish()
 })
 
 export type UserType = z.infer<typeof userZod>
@@ -43,7 +43,7 @@ export const user = new Resource(
     userZod,
     {
         name: "user",
-        filterableAttributes: ["author.id"]
+        filterableAttributes: ["author.id", "code"]
     },
     {
         dependantFields: {
@@ -54,7 +54,7 @@ export const user = new Resource(
         },
         onGet: new ServerFunction((props) => {
             return props.next(props)
-        }, {}),
+        }),
         secretFields: {
             password: "**secret**"
         }

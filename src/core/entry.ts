@@ -60,7 +60,7 @@ export async function core() {
                 message: "route not found",
                 status: 404
             })
-
+            console.log(context)
             error(context.error)
 
             return ({

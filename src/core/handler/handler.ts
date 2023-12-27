@@ -135,7 +135,6 @@ export class Handler<
         getInjections?: Injections | (() => (Injections | Promise<Injections>)),
         options?: Partial<PureOptions>,
     ) {
-
         super(method, url, permissions, async (ctx) => {
             try {
                 const props = await this.transformProps(ctx)
@@ -199,11 +198,13 @@ export class Handler<
 
             const body = await (async function () {
                 try {
-                    return await ctx.body
+                    // return await ctx.request.json()
+                    return {} as any
                 } catch (e) {
                     return {}
                 }
             })()
+
             _.forIn(this.propsLocation, (value, key) => {
                 switch (value.location) {
                     case "header": {
