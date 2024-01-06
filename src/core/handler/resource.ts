@@ -248,9 +248,9 @@ export class Resource<ZDocument extends zDocumentBase> {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async setToRedis(document: MeilisearchDocument<ZDocument>) {
-        // await this.redis.set(this.getRedisId(document.id), JSON.stringify(document))
+        // expire in hour
+        await this.redis.set(this.getRedisId(document.id), JSON.stringify(document), {EX: 60 * 60})
     }
 
     getRedisId(id: number | string) {
