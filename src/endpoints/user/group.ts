@@ -71,11 +71,11 @@ export const searchUserGroup = new Handler(
     zPropsSearchFactory(),
     zResponseSearchFactory(userGroupZod),
     ({query, body}) => ({
-        limit: query("l"),
-        offset: query("o"),
-        query: query("q"),
+        size: query("size"),
+        from: query("from"),
+        query: body("query"),
         sort: body("sort"),
-        filter: body("filter")
+        aggs: body("aggs")
     }),
     "get",
     userGroup.search

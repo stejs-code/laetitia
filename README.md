@@ -18,8 +18,7 @@ when using dates always use coerce type for correct parsing
 z.coerce.date() !== z.date() 
 ```
 
-# Snippets
-### Delete all indexes
-```ts
-(await meilisearch.getIndexes()).results.forEach((i) => meilisearch.deleteIndex(i.uid))
-```
+## Elasticsearch rules
+### Ids
+field "_id" is string, always, that's es policy\
+field "id" could be number, for sorting, that decides developer for each resource

@@ -1,26 +1,32 @@
-import {meilisearch} from "~/core/provider/meilisearch.ts";
 import {defer} from "~/core/utils/defer.ts";
+import {elasticsearch} from "~/core/provider/elasticsearch.ts";
 
-try {
-    await meilisearch.getIndex("counter")
-} catch (e) {
-    await meilisearch.tasks.waitForTask((await meilisearch.createIndex("counter")).taskUid)
-}
+await elasticsearch.createIndex({
+    index: "counter",
+})
 
-const counterMap = new Map((await meilisearch.index<{
-    id: string,
-    count: number
-}>("counter").search("", {limit: 1000})).hits.map((i) => [i.id, i.count]))
-
+const counterMap = new Map((await elasticsearch.search<{ count: number }>({
+    index: "counter",
+    size: 1000,
+})).data?.hits.hits.map((i) => [i._id, i._source?.count]))
 
 export function getCount(idOfCounter: string) {
     const count = (counterMap.get(idOfCounter) || 0) + 1
+    counterMap.set(idOfCounter, count)
     defer(async () => {
-        counterMap.set(idOfCounter, count)
-        await meilisearch.index("counter").addDocuments([{
+        const update = await elasticsearch.update({
+            index: "counter",
             id: idOfCounter,
-            count: count,
-        }])
+            doc: {count: count}
+        })
+
+        if (update.error) {
+            await elasticsearch.index({
+                index: "counter",
+                id: idOfCounter,
+                document: {count: count}
+            })
+        }
     })
     return count
 }

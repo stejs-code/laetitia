@@ -196,14 +196,7 @@ export class Handler<
             } = {}
             const query = new Map(ctx.request.url.split("?").pop()?.split("&").map(i => i.split("=")) as Iterable<[unknown, unknown]>)
 
-            const body = await (async function () {
-                try {
-                    // return await ctx.request.json()
-                    return {} as any
-                } catch (e) {
-                    return {}
-                }
-            })()
+            const body = ctx.body ?? {}
 
             _.forIn(this.propsLocation, (value, key) => {
                 switch (value.location) {
