@@ -16,6 +16,7 @@ import {Resource} from "~/core/handler/resource.ts";
 import {isDev} from "~/core/utils/general.ts";
 import {defer} from "~/core/utils/defer.ts";
 import {elasticsearch} from "~/core/provider/elasticsearch.ts";
+import staticPlugin from "@elysiajs/static";
 
 export async function core() {
     const start = Bun.nanoseconds()
@@ -35,7 +36,7 @@ export async function core() {
 
     if (!Bun.env.CORE_ENDPOINTS_DIR) throw new Error("environment variable CORE_ENDPOINTS_DIR is undefined");
 
-    elasticsearch.search({}).then(({error} )=>{
+    elasticsearch.search({}).then(({error}) => {
         if (error?.name === "ConnectionRefused") {
             throw new Error("Elasticsearch refused connection")
         }
@@ -85,7 +86,11 @@ export async function core() {
         //     const start = requestsMap.get(ctx.requestID) || 0
         //     info(`id:${ctx.requestID} took:${Math.floor((Bun.nanoseconds() - start) / 10000) / 100}ms`)
         // })
-        .onStart(() => info(`Server started at http://0.0.0.0:${port} in ${Math.round((Bun.nanoseconds() - start)/1000000)} ms`))
+        .use(staticPlugin({
+            assets: "src/static",
+            prefix: "static"
+        }))
+        .onStart(() => info(`Server started at http://0.0.0.0:${port} in ${Math.round((Bun.nanoseconds() - start) / 1000000)} ms`))
 
     const v1Group = new Elysia({prefix: "/v1"})
 
@@ -155,7 +160,7 @@ export async function core() {
     for (const handler of pureHandlers.values()) {
         elysiaHandlers[handler.handler.method.toLowerCase()](
             handler.path,
-            (context) => {
+            (context: any) => {
                 return handler.handler._handler(context)
             }
         );
