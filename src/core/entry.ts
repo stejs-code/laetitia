@@ -17,9 +17,12 @@ import {isDev} from "~/core/utils/general.ts";
 import {defer} from "~/core/utils/defer.ts";
 import {elasticsearch} from "~/core/provider/elasticsearch.ts";
 import staticPlugin from "@elysiajs/static";
+import {getRelativeTimeString} from "~/core/utils/getRelativeTimeString.ts";
 
 export async function core() {
     const start = Bun.nanoseconds()
+    const startTime = Date.now()
+
     const notSetEnv = [
         "ELASTIC_USER",
         "ELASTIC_PASSWORD",
@@ -230,7 +233,8 @@ export async function core() {
 
     app.get("/", () => ({
         version,
-        startId
+        startId,
+        started: getRelativeTimeString(startTime)
     }))
 
     app.get("/v1/core/heap", () => generateHeapSnapshot())
