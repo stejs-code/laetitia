@@ -156,7 +156,8 @@ describe('resource', () => {
                 },
             }
         })
-
+        console.log(create.body)
+        console.log(update2.body)
         expect(update2.body.error).toBe(false)
 
         // meant not to succeed

@@ -65,11 +65,11 @@ export const searchSession = new Handler(
     zPropsSearchFactory(),
     zResponseSearchFactory(sessionZod),
     ({query, body}) => ({
-        limit: query("l"),
-        offset: query("o"),
-        query: query("q"),
+        size: query("size"),
+        from: query("from"),
+        query: body("query"),
         sort: body("sort"),
-        filter: body("filter")
+        aggs: body("aggs")
     }),
     "get",
     session.search
@@ -139,8 +139,13 @@ export const loginWithCode = new Handler(
     async ({data: {code}}, {searchUser, createSession, getUserGroup}) => {
         if (code) {
             const response = await searchUser.asSuper({
-                query: "",
-                filter: [`code = ${code}`]
+                query: {
+                    bool: {
+                        filter: [
+                            [{term: {"code": code}}]
+                        ]
+                    }
+                }
             })
 
             if (!response.hits.length) throw new ApiError(404, "Code not found")

@@ -1,14 +1,9 @@
 import type {AnyZodObject} from "zod";
-import { ZodArray, ZodObject} from "zod";
 import {z, ZodError} from "zod";
 import type {HandlerFunction} from "~/core/handler/handler.ts";
-import {meilisearch} from "~/core/provider/meilisearch.ts";
-import type {Index, MeiliSearch, Settings} from "meilisearch";
-import {MeiliSearchApiError} from "meilisearch";
 import {ApiError} from "~/core/apiError.ts";
 import {getCount} from "~/core/utils/counter.ts";
-import _ from "lodash";
-import {error, info} from "~/core/utils/logger.ts";
+import {error} from "~/core/utils/logger.ts";
 import {defer} from "~/core/utils/defer.ts";
 import type {MaybePromise} from "~/core/utils/types.ts";
 import {getIndexName} from "~/core/utils/getIndexName.ts";
@@ -19,7 +14,8 @@ import {safeAsync} from "~/core/utils/safe.ts";
 import StatusCode from "status-code-enum";
 import type {ServerFunction} from "~/core/handler/function.ts";
 import {ApiContext} from "~/core/handler/apiContext.ts";
-import {unwrapZod} from "~/core/utils/zod.ts";
+import {elasticsearch} from "~/core/provider/elasticsearch.ts";
+import type {IndicesIndexSettings} from "@elastic/elasticsearch/lib/api/types";
 
 export const zCreatedAt = z.coerce.date().describe("date of the document creation")
 
@@ -62,11 +58,17 @@ export const zResponseGetFactory = function <ZDocument extends zDocumentBase>(do
 
 export const zPropsSearchFactory = function () {
     return z.object({
-        query: z.string(),
-        filter: z.array(z.string().or(z.array(z.string()))).optional(),
-        sort: z.array(z.string()).optional(),
-        limit: z.number().default(20),
-        offset: z.number().default(0),
+        query: z.record(z.any()).describe("https://www.elastic.co/guide/en/elasticsearch/reference/8.11/filter-search-results.html"),
+        sort: z.array(
+            z.union([z.string(), z.record(z.union([z.literal("desc"), z.literal("asc")]))])
+        ).optional().describe("https://www.elastic.co/guide/en/elasticsearch/reference/8.11/sort-search-results.html"),
+        size: z.number().default(20).describe("result documents limit"),
+        from: z.number().default(0).describe("search offset (pagination)"),
+        aggs: z.record(z.object({
+            terms: z.object({
+                field: z.string()
+            })
+        })).optional().describe("unfinished typing: https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html")
     })
 }
 
@@ -199,8 +201,7 @@ export type InputReturnType<T extends (...args: never[]) => AnyZodObject> = z.in
 export type InferReturnType<T extends (...args: never[]) => AnyZodObject> = z.infer<ReturnType<T>>
 
 export class Resource<ZDocument extends zDocumentBase> {
-    private readonly index: Index<z.infer<ZDocument> & z.infer<typeof zMeilisearchDocument>>;
-    private meilisearch: MeiliSearch;
+    private readonly index: string;
     private redis: RedisClientType;
     public dependentsSet = new Set<Omit<DependencyType<any, any>, "resourceId"> & { resource: Resource<any> }>
 
@@ -208,38 +209,17 @@ export class Resource<ZDocument extends zDocumentBase> {
         public zDocument: ZDocument,
         indexSettings: {
             name: string
-        } & Partial<Settings>,
+        } & Partial<IndicesIndexSettings>,
         public readonly settings: ResourceSettings<ZDocument> = {}
     ) {
-        this.meilisearch = meilisearch
-        this.index = meilisearch.index(getIndexName(indexSettings.name))
+        this.index = getIndexName(indexSettings.name)
         this.redis = redis
-
-        indexSettings.filterableAttributes = Array.from(new Set([
-            ...indexSettings.filterableAttributes || [],
-            ...this.getDependencies().map(i => i.field + ".id")]
-        ))
 
         defer(async () => {
             // ensure, that index exists
-            try {
-                await this.index.getSettings()
-            } catch (e) {
-                await this.meilisearch.tasks.waitForTask((await meilisearch.createIndex(this.index.uid)).taskUid)
-            }
-
-            // ensure that index has the correct settings
-            try {
-                const settings = await this.index.getSettings()
-                if (!Bun.deepEquals(settings, {...settings, ..._.omit(indexSettings, ["name"])})) {
-                    info(`updating ${this.index.uid} settings`)
-                    await this.meilisearch.tasks.waitForTask((await this.index.updateSettings(_.omit(indexSettings, ["name"]))).taskUid)
-                    info(`${this.index.uid} settings are up to date`)
-                }
-            } catch (e) {
-                error(`Unexpected error happened while updating ${this.index.uid} index.`)
-                error(e)
-            }
+            await elasticsearch.createIndex({
+                index: this.index
+            })
         })
     }
 
@@ -268,13 +248,13 @@ export class Resource<ZDocument extends zDocumentBase> {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async setToRedis(document: MeilisearchDocument<ZDocument>) {
-        // await this.redis.set(this.getRedisId(document.id), JSON.stringify(document))
+        // expire in hour
+        await this.redis.set(this.getRedisId(document.id), JSON.stringify(document), {EX: 60 * 60})
     }
 
     getRedisId(id: number | string) {
-        return this.index.uid + ":" + id
+        return this.index + ":" + id
     }
 
     get = async (inputProps: InputReturnType<typeof zPropsGetFactory<never>>): Promise<InferReturnType<typeof zResponseGetFactory<never>>> => {
@@ -289,6 +269,8 @@ export class Resource<ZDocument extends zDocumentBase> {
             return this.getWithoutEvent(inputProps)
 
         } catch (e) {
+            if (e instanceof ApiError) throw e
+
             if (e instanceof ZodError) {
                 throw new ApiError(500, "props malformed", "zod", e)
             }
@@ -309,13 +291,23 @@ export class Resource<ZDocument extends zDocumentBase> {
                 if (document) {
                     return zResponseGetFactory(this.zDocument).parse({
                         _cache: true,
-                        _index: this.index.uid,
+                        _index: this.index,
                         ...this.replaceSecretKeys(document),
                     }, {path: ["resource", "getWithoutEventCache", "response"]})
                 }
             }
 
-            const document = this.zDocument.merge(zMeilisearchDocument).parse(await this.index.getDocument(props.id), {path: ["resource", "getWithoutEvent", "document"]}) as MeilisearchDocument<ZDocument>
+
+            const response = await elasticsearch.get({
+                index: this.index,
+                id: String(props.id)
+            })
+
+            if (!response.data) throw new ApiError(404, "document not found")
+
+            const document = this.zDocument
+                .merge(zMeilisearchDocument)
+                .parse(response.data._source, {path: ["resource", "getWithoutEvent", "document"]}) as MeilisearchDocument<ZDocument>
 
             defer(() => {
                 this.setToRedis(document)
@@ -323,14 +315,11 @@ export class Resource<ZDocument extends zDocumentBase> {
 
             return zResponseGetFactory(this.zDocument).parse({
                 _cache: false,
-                _index: this.index.uid,
+                _index: this.index,
                 ...this.replaceSecretKeys(document),
             }, {path: ["resource", "getWithoutEvent", "response"]})
         } catch (e) {
-            if (e instanceof MeiliSearchApiError) {
-                throw new ApiError(404, "not found")
-            }
-
+            if (e instanceof ApiError) throw e
             if (e instanceof ZodError) {
                 throw new ApiError(500, "type parsing failed", "zod", e)
             }
@@ -345,33 +334,24 @@ export class Resource<ZDocument extends zDocumentBase> {
         try {
             const props = zPropsSearchFactory().parse(inputProps, {path: ["resource", "search", "inputProps"]})
 
-            const {
-                filter,
-                limit,
-                offset,
-                query,
-                sort
-            } = props;
-
-            const response = await this.index.search(query, {
-                filter,
-                sort,
-                offset,
-                limit
+            // TODO: Search params
+            const response = await elasticsearch.search({
+                index: this.index,
+                query: props.query,
+                aggs: props.aggs,
+                size: props.size,
+                from: props.from,
             })
 
-            return zResponseSearchFactory(this.zDocument).parse({
-                hits: response.hits.map(i => this.replaceSecretKeys(i))
-            }, {path: ["resource", "search", "response"]})
-        } catch (e) {
-            if (e instanceof MeiliSearchApiError) {
-                // TODO: be more specific
-
-                error("Resource meilisearch search error:")
-                error(e)
-                throw new ApiError(500, "internal error in meilisearch")
+            if (!response.data) {
+                error(response.error)
+                throw new ApiError(500, "unknown error happened while searching")
             }
 
+            return zResponseSearchFactory(this.zDocument).parse({
+                hits: response.data.hits.hits.map(i => this.replaceSecretKeys(i._source as any))
+            }, {path: ["resource", "search", "response"]})
+        } catch (e) {
             if (e instanceof ZodError) {
                 throw new ApiError(500, "document malformed", "zod", e)
             }
@@ -383,8 +363,8 @@ export class Resource<ZDocument extends zDocumentBase> {
 
 
     protected createId() {
-        if (this.zDocument.shape.id.safeParse(1).success) {
-            return getCount(this.index.uid)
+        if (this.zDocument.shape.id._def.typeName === "ZodNumber") {
+            return getCount(this.index)
         }
 
         return randomId(20)
@@ -489,6 +469,8 @@ export class Resource<ZDocument extends zDocumentBase> {
             const document: MeilisearchDocument<ZDocument> = {
                 ...previousDocument,
                 ...props.data as z.infer<ZDocument>,
+                _index: undefined,
+                _cache: undefined,
                 id: props.id,
                 updatedAt: new Date(),
                 createdAt: previousDocument?.createdAt || new Date(),
@@ -498,52 +480,59 @@ export class Resource<ZDocument extends zDocumentBase> {
             defer(() => {
                 this.setToRedis(document)
 
-                this.dependentsSet.forEach(async ({resource, transform, field}) => {
-                    const transformed = transform(document)
-
-                    const response = (await resource.index.search("", {
-                        attributesToRetrieve: ["id", field],
-                        filter: [`${field}.id = ${document.id}`],
-                        limit: 1000, // TODO: more than 1000
-                    })).hits.map(i => {
-                        if (unwrapZod(resource.zDocument.shape[field]) instanceof ZodObject) {
-                            return {
-                                ...i,
-                                [field]: transformed,
-                            }
-                        }
-
-                        if (unwrapZod(resource.zDocument.shape[field]) instanceof ZodArray) {
-                            return {
-                                ...i,
-                                [field]: i[field]?.map((j: { id: string | number }) => {
-                                    if (j.id === document.id) {
-                                        return transformed
-                                    }
-
-                                    return j
-                                })
+                for (const {resource, transform, field} of this.dependentsSet) {
+                    elasticsearch.updateByQuery({
+                        index: resource.index,
+                        script: {
+                            source: "ctx._source[params.field] = params.data",
+                            lang: "painless",
+                            params: {
+                                data: transform(document),
+                                field: "event"
+                            },
+                        },
+                        query: {
+                            bool: {
+                                filter: [
+                                    {term: {[`${field}.id`]: document.id}}
+                                ]
                             }
                         }
                     })
-
-                    await resource.index.updateDocumentsInBatches(response, 200)
-
-                })
+                }
             })
 
-            await this.meilisearch.tasks.waitForTask((await this.index.updateDocuments([document])).taskUid)
+            if (previousDocument) {
+                const response = await elasticsearch.update({
+                    index: this.index,
+                    id: String(document.id), // TODO: remove
+                    doc: document
+                })
+
+                if (response.error) {
+                    error(response.error)
+                    throw new ApiError(500, "unexpected elastic error", "elastic")
+                }
+            } else {
+                const response = await elasticsearch.index({
+                    index: this.index,
+                    id: String(document.id), // TODO: remove
+                    document: document
+                })
+
+                if (response.error) {
+                    error(response.error)
+                    throw new ApiError(500, "unexpected elastic error", "elastic")
+                }
+            }
+
 
             return zResponseUpdateFactory(this.zDocument).parse({
-                _index: this.index.uid,
                 ...this.replaceSecretKeys(document),
+                _index: this.index,
             }, {path: ["resource", "updateWithoutEvent", "response"]})
         } catch (e) {
             if (e instanceof ApiError) throw e
-
-            if (e instanceof MeiliSearchApiError) {
-                throw new ApiError(500, "document wasn't created")
-            }
 
             if (e instanceof ZodError) {
                 throw new ApiError(500, "document malformed", "zod", e)
@@ -559,20 +548,23 @@ export class Resource<ZDocument extends zDocumentBase> {
         try {
             const props = zPropsDeleteFactory(this.zDocument).parse(inputProps, {path: ["resource", "delete", "inputProps"]})
 
-            await this.meilisearch.tasks.waitForTask((await this.index.deleteDocument(props.id)).taskUid)
+            const response = await elasticsearch.delete({
+                index: this.index,
+                id: String(props.id)
+            })
+
+            if (response.error) {
+                throw new ApiError(500, "unexpected elastic error", "elastic")
+            }
 
             await redis.del(this.getRedisId(props.id))
 
             return zResponseDeleteFactory(this.zDocument).parse({
-                _index: this.index.uid,
+                _index: this.index,
                 id: props.id,
                 success: true
             }, {path: ["resource", "delete", "response"]})
         } catch (e) {
-            if (e instanceof MeiliSearchApiError) {
-                throw new ApiError(500, "document may not be deleted")
-            }
-
             if (e instanceof ZodError) {
                 throw new ApiError(500, "document malformed", "zod", e)
             }

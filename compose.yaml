@@ -1,16 +1,39 @@
+version: '3'
 services:
-  meilisearch:
-    image: "getmeili/meilisearch:v1.5"
-    container_name: meilisearch
-    ports:
-      - "7700:7700"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
     environment:
-      MEILI_MASTER_KEY: "1234"
-    volumes:
-      - "./tmp/meili_data:/temp/meili_data"
+      - bootstrap.memory_lock=true
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - ELASTIC_PASSWORD=VerySecret
+      - xpack.security.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - KIBANA_PASSWORD=VerySecret
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    networks: ['stack']
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.3
+    environment:
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=VerySecure
+    ports: ['5601:5601']
+    networks: ['stack']
+    links: ['elasticsearch']
+    depends_on: ['elasticsearch']
   redis:
     image: "redis:6.2-alpine"
     ports:
       - '6379:6379'
-#    volumes:
-#      - cache:/temp/redis_data
+
+
+networks:
+  stack: {}

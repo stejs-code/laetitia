@@ -1,10 +1,12 @@
 import {ApiError} from "~/core/apiError.ts";
 import StatusCode from "status-code-enum";
-import {meilisearch} from "~/core/provider/meilisearch.ts";
 import {getIndexName} from "~/core/utils/getIndexName.ts";
-import {allTruePermissions, PermissionsType, permissionsZod} from "~/core/generated/permissions.ts";
+import type {PermissionsType} from "~/core/generated/permissions.ts";
+import {allTruePermissions, permissionsZod} from "~/core/generated/permissions.ts";
 import {error} from "~/core/utils/logger.ts";
 import type {Context} from "elysia";
+import {elasticsearch} from "~/core/provider/elasticsearch.ts";
+import type {ApiKey} from "~/endpoints/app/api-key.ts";
 
 export type LoginMethod = "api-key" | "master-key" | "super-user"
 
@@ -46,13 +48,20 @@ export class ApiContext {
                 return new ApiContext(id, "master-key", allTruePermissions)
             }
 
-            const key = await meilisearch.index(getIndexName("api-key")).getDocument(id)
+            const key = await elasticsearch.get<ApiKey>({
+                index: getIndexName("api-key"),
+                id: id
+            })
 
-            if (new Date(key.expiresAt).getTime() < new Date().getTime()) {
+            if (!key.data) {
+                throw new ApiError(StatusCode.ClientErrorUnauthorized, "api key not found")
+            }
+
+            if (!key.data._source?.expiresAt || new Date(key.data._source.expiresAt).getTime() < new Date().getTime()) {
                 throw new ApiError(StatusCode.ClientErrorUnauthorized, "api key has expired")
             }
 
-            return new ApiContext(key.id, "api-key", permissionsZod.parse(key.permissions))
+            return new ApiContext(key.data._id, "api-key", permissionsZod.parse(key.data._source.permissions))
         } catch (e) {
             if (e instanceof ApiError) throw e
 
