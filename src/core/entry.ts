@@ -237,6 +237,38 @@ export async function core() {
         started: getRelativeTimeString(startTime)
     }))
 
+    app.get("/v1/words/:mainLetter/:otherLetters", async (ctx: any) => {
+        const mainLetter = ctx.params.mainLetter
+        const allLetters = [...ctx.params.otherLetters.split(""), mainLetter]
+
+        const wordList = (await Bun.file("src/static/popular.txt").text()).split("\n")
+
+        const foundLetters: { score: number, word: string }[] = []
+
+        for (const word of wordList) {
+            let score = 0
+
+            if (word.length <= 3) continue
+
+            if (word.split("").map(i => allLetters.includes(i)).find(i => !i) !== undefined) {
+                continue
+            }
+
+            score = word.split(mainLetter).length - 1
+
+            if (score > 0) foundLetters.push({
+                score,
+                word
+            })
+        }
+
+        foundLetters.sort(function (a, b) {
+            return b.score - a.score;
+        })
+
+        return foundLetters.map(i => i.word).join("\n")
+    })
+
     app.get("/v1/core/heap", () => generateHeapSnapshot())
 
     app.listen(port)
